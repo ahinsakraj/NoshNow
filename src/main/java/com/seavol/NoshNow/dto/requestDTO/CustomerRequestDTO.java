@@ -1,7 +1,6 @@
 package com.seavol.NoshNow.dto.requestDTO;
 
 import com.seavol.NoshNow.Enum.Gender;
-import jakarta.persistence.Entity;
 import lombok.*;
 import lombok.experimental.FieldDefaults;
 
