@@ -51,6 +51,7 @@ public class CouponServiceImpl implements CouponService {
         }
         Coupon coupon = optionalCoupon.get();
         coupon.setExpired(!coupon.isExpired());
+        couponRepository.save(coupon);
         CouponResponseDTO couponResponseDTO = CouponTransformer.CouponToCouponResponseDTO(coupon);
         couponResponseDTO.setMessage(getMessage(coupon));
         return couponResponseDTO;

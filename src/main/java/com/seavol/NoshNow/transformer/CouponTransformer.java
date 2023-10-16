@@ -17,7 +17,7 @@ public class CouponTransformer {
                 .flatOff(0)
                 .percentOff(0)
                 .cashback(0)
-                .paymentList(new ArrayList<>())
+                .expired(false)
                 .build();
     }
 

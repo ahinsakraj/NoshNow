@@ -18,6 +18,17 @@ public class FoodTransformer {
                 .build();
     }
 
+    public static FoodResponseDTO FoodToFoodResponseDTO(Food food) {
+        return FoodResponseDTO.builder()
+                .dishName(food.getItem().getDishName())
+                .price(food.getItem().getPrice())
+                .quantity(food.getQuantity())
+                .totalPrice(food.getItem().getPrice() * food.getQuantity())
+                .foodCategory(food.getItem().getCategory())
+                .isVeg(food.getItem().isVeg())
+                .build();
+    }
+
     public static Food ItemToFood(Item item) {
         return Food.builder()
                 .quantity(1)

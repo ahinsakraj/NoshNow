@@ -26,7 +26,7 @@ public class OrderEntity {
     String orderId;
 
     @Column(name = "order_total")
-    int orderTotal;
+    double orderTotal;
 
     @CreationTimestamp
     @Column(name = "order_time")
@@ -44,10 +44,9 @@ public class OrderEntity {
     @JoinColumn
     Restaurant restaurant;
 
-    @OneToOne
+    @ManyToOne
     @JoinColumn
-
-    Payment payment;
+    Coupon coupon;
 
     @OneToMany(mappedBy = "orderEntity", cascade = CascadeType.ALL)
     List<Food> foodList = new ArrayList<>();
