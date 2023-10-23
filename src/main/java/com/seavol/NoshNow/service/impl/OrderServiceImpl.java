@@ -15,7 +15,6 @@ import org.springframework.stereotype.Service;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 
 @Service
@@ -41,120 +40,119 @@ public class OrderServiceImpl implements OrderService {
     }
 
     @Override
-    public OrderResponseDTO placeOrder(String mobile) {
-        OrderEntity order = prepareOrder(mobile);
-        return OrderTransformer.OrderToOrderResponseDTO(order);
-    }
-
-    @Override
     public AppliedCouponResponseDTO applyCoupon(String mobile, String couponName) {
-        OrderEntity order = addCoupon(mobile, couponName);
-
-        // Validate cart to pass as argument and return response
+        // Validate cart and coupon
         Cart cart = validationUtils.validateCart(mobile);
-        OrderResponseDTO orderResponseDTO = prepareOrderResponseDTO(order, cart);
+        Coupon coupon = validationUtils.validateCoupon(couponName);
 
-        // This is a post made change and code is needed to rebuild and reformat and cleaned
+        // Check if coupon is applicable at this price
+        if(cart.getCartTotal() < coupon.getApplicableValue()) {
+            throw new InvalidCouponException("Add some more item to apply the coupon");
+        }
+        int discount = calculateDiscount(cart.getCartTotal(), coupon);
+
         return AppliedCouponResponseDTO.builder()
                 .message("Coupon added successfully")
-                .orderTotal(orderResponseDTO.getOrderTotal())
-                .coupon(orderResponseDTO.getCoupon())
-                .discount(orderResponseDTO.getDiscount())
-                .grandTotal(orderResponseDTO.getGrandTotal())
+                .orderTotal(cart.getCartTotal())
+                .coupon(coupon.getName())
+                .discount(discount)
+                .grandTotal(cart.getCartTotal() - discount)
                 .build();
     }
 
     @Override
     public AppliedCouponResponseDTO removeCoupon(String mobile) {
-        OrderResponseDTO orderResponseDTO = placeOrder(mobile);
-
-        // This is a post made change and code is needed to rebuild and reformat and cleaned
+        Cart cart = validationUtils.validateCart(mobile);
         return AppliedCouponResponseDTO.builder()
                 .message("Coupon removed successfully")
-                .orderTotal(orderResponseDTO.getOrderTotal())
-                .coupon(orderResponseDTO.getCoupon())
-                .discount(orderResponseDTO.getDiscount())
-                .grandTotal(orderResponseDTO.getGrandTotal())
+                .orderTotal(cart.getCartTotal())
+                .coupon("No Coupon Applied")
+                .discount(0)
+                .grandTotal(cart.getCartTotal())
                 .build();
     }
 
     @Override
-    public OrderResponseDTO makeSimplePayment(String mobile) {
+    public OrderResponseDTO placeOrder(String mobile) {
+        // Prepare Order and save it
         OrderEntity order = prepareOrder(mobile);
+        orderRepository.save(order);
 
         // Validate cart to make it empty
         Cart cart = validationUtils.validateCart(mobile);
+
+        // Extract food list
+        List<Food> foodList = new ArrayList<>(cart.getFoodList());
+
         // Empty the cart
         cart.getFoodList().clear();
         cartRepository.save(cart);
 
-        // Save the order
-        orderRepository.save(order);
-
-        // Remove food from cart and add to the order
-        List<Food> foodList = order.getFoodList();
+        // Remove food from cart and add it to order
         for(Food food : foodList) {
             food.setCart(null);
             food.setOrderEntity(order);
             foodRepository.save(food);
         }
 
-        // Save the order
+
+        // Set foodList and Save the order
+        order.setFoodList(foodList);
         orderRepository.save(order);
-
-
 
         return OrderTransformer.OrderToOrderResponseDTO(order);
     }
 
     @Override
-    public OrderResponseDTO makeCouponPayment(String mobile, String couponName) {
-        OrderEntity order = addCoupon(mobile, couponName);
+    public OrderResponseDTO placeOrderWithCoupon(String mobile, String couponName) {
+        OrderEntity order = prepareOrder(mobile);
+        addCoupon(order, couponName);
         orderRepository.save(order);
 
-        // Validate cart to pass argument and return response
+
+
+        // Validate cart to make it empty
         Cart cart = validationUtils.validateCart(mobile);
 
-        // Remove food from cart and add to the order
-        List<Food> foodList = cart.getFoodList();
+        // Extract food list
+        List<Food> foodList = new ArrayList<>(cart.getFoodList());
+
+        // Empty the cart
+        cart.getFoodList().clear();
+        cartRepository.save(cart);
+
+        // Remove food from cart and add it to order
         for(Food food : foodList) {
             food.setCart(null);
             food.setOrderEntity(order);
             foodRepository.save(food);
         }
 
-        // Save the order
+
+        // Set foodList and Save the order
+        order.setFoodList(foodList);
         orderRepository.save(order);
 
-        // Empty the cart
-        foodList.clear();
-        cartRepository.save(cart);
-
-
-        return OrderTransformer.OrderToOrderResponseDTO(order);
+        // Prepare the OrderResponseDTO and set the proper values
+        OrderResponseDTO orderResponseDTO = OrderTransformer.OrderToOrderResponseDTO(order);
+        orderResponseDTO.setCoupon(couponName);
+        int discount = calculateDiscount(order.getOrderTotal(), order.getCoupon());
+        orderResponseDTO.setDiscount(discount);
+        orderResponseDTO.setGrandTotal(order.getOrderTotal() - discount);
+        return orderResponseDTO;
     }
 
-    public OrderEntity addCoupon(String mobile, String couponName) {
-        // Validate cart
-        Cart cart = validationUtils.validateCart(mobile);
-        double cartTotal = cart.getCartTotal();
-
-
+    public void addCoupon(OrderEntity order, String couponName) {
         // Validate Coupon
-        Optional<Coupon> optionalCoupon = Optional.ofNullable(couponRepository.findByName(couponName));
-        if(optionalCoupon.isEmpty()) {
-            throw new InvalidCouponException("Enter a valid Coupon");
-        }
-        Coupon coupon = optionalCoupon.get();
+        Coupon coupon = validationUtils.validateCoupon(couponName);
         double applicableValue = coupon.getApplicableValue();
-        if(cartTotal < applicableValue) {
+        double orderTotal = order.getOrderTotal();
+
+        // Check if coupon is applicable at this price
+        if(orderTotal < applicableValue) {
             throw new InvalidCouponException("Add some more item to apply the coupon");
         }
-
-        // Prepare order
-        OrderEntity order = prepareOrder(mobile);
         order.setCoupon(coupon);
-        return order;
     }
 
     public int calculateDiscount(double cartTotal, Coupon coupon) {
@@ -167,20 +165,6 @@ public class OrderServiceImpl implements OrderService {
             discount = cartTotal * coupon.getPercentOff() / 100;
         }
         return (int)(discount);
-    }
-
-    public OrderResponseDTO prepareOrderResponseDTO(OrderEntity order, Cart cart) {
-
-        Coupon coupon = order.getCoupon();
-        // Prepare OrderResponseDTO
-        OrderResponseDTO orderResponseDTO = OrderTransformer.OrderToOrderResponseDTO(order);
-        orderResponseDTO.setCoupon(coupon.getName());
-
-        // Set Discount and final price
-        int discount = calculateDiscount(cart.getCartTotal(), coupon);
-        orderResponseDTO.setDiscount(discount);
-        orderResponseDTO.setGrandTotal(cart.getCartTotal() - discount);
-        return orderResponseDTO;
     }
 
     public OrderEntity prepareOrder(String mobile) {
@@ -201,7 +185,6 @@ public class OrderServiceImpl implements OrderService {
         order.setCustomer(customer);
         order.setDeliveryPartner(deliveryPartner);
         order.setRestaurant(cart.getFoodList().get(0).getItem().getRestaurant());
-        order.setFoodList(new ArrayList<>(cart.getFoodList()));
         return order;
     }
 }

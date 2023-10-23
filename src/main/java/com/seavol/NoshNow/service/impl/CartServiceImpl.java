@@ -60,35 +60,40 @@ public class CartServiceImpl implements CartService {
 
         // Empty Cart if this Item's Restaurant is different
         validateRestaurant(item, foodList, cart);
-        // Increase Quantity if this Item already Exist
+
         Food food = doesExist(foodList, item.getId());
-        if(food != null) {
+
+
+        if(food != null) { // Increase Quantity if this Item already Exist
             int quantity = food.getQuantity();
+
+            // check for the quantity limit
             if(quantity >= 10) {
                 throw new InvalidQuantityException("Sorry : We don't serve more than 10 orders at once.");
             }
             food.setQuantity(quantity + 1);
-            cart.setCartTotal(calculateCartTotal(foodList));
-            cartRepository.save(cart);
-            return CartTransformer.cartTocartResponseDTO(cart);
-        }
+        } else { // Add the item to the cart as new
 
-        // Prepare food by item
-        food = FoodTransformer.ItemToFood(item);
-        food.setCart(cart); // Set cart
-        Food savedFood = foodRepository.save(food);
-        foodList.add(savedFood); // add food to cartList
-        item.getFoodList().add(savedFood); // add food to itemList
+            // Prepare food by item
+            food = FoodTransformer.ItemToFood(item);
+            food.setCart(cart); // Set cart
+            Food savedFood = foodRepository.save(food);
+            foodList.add(savedFood); // add food to cartList
+            item.getFoodList().add(savedFood); // add food to itemList
+        }
         cart.setCartTotal(calculateCartTotal(foodList));
         cartRepository.save(cart);
         return CartTransformer.cartTocartResponseDTO(cart);
     }
 
     private CartResponseDTO removeFromCart(Cart cart, Item item, List<Food> foodList) {
+        // Check if food exists in the cart user requested to delete for
         Food food = doesExist(foodList, item.getId());
         if(food == null) {
             throw new InvalidQuantityException("You can't remove food that hasn't added to your cart");
         }
+
+        // reduce the quantity and if quantity becomes zero remove it from the cart
         int quantity = food.getQuantity();
         quantity = quantity - 1;
         food.setQuantity(quantity);
@@ -112,9 +117,13 @@ public class CartServiceImpl implements CartService {
     }
     
     private void validateRestaurant(Item item, List<Food> foodList, Cart cart) {
+        // If no item is added to cart we can add items from any restautant
         if(foodList.isEmpty()) {
             return;
         }
+
+        // If the current item added in the cart isn't from the same as previous restaurant
+        // we empty the cart to add new item because in one order user can only book item from single restaurant
         if(foodList.get(0).getItem().getRestaurant().getId() != item.getRestaurant().getId()) {
             foodRepository.deleteAllInBatch(foodList);
             foodList.clear();
@@ -127,7 +136,6 @@ public class CartServiceImpl implements CartService {
         Customer customer = validationUtils.validateCustomer(mobile);
         return CartTransformer.cartTocartResponseDTO(customer.getCart());
     }
-
 
     public double calculateCartTotal(List<Food> foodList) {
         double total = 0;
